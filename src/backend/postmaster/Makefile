@@ -25,6 +25,7 @@ OBJS = \
 	shell_archive.o \
 	startup.o \
 	syslogger.o \
-	walwriter.o
+	walwriter.o \
+	border_collie_process.o
 
 include $(top_srcdir)/src/backend/common.mk

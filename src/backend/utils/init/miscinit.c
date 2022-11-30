@@ -291,6 +291,9 @@ GetBackendTypeDesc(BackendType backendType)
 		case B_LOGGER:
 			backendDesc = "logger";
 			break;
+		case B_BORDER_COLLIE:
+			backendDesc = "border-collie backend";
+			break;
 	}
 
 	return backendDesc;

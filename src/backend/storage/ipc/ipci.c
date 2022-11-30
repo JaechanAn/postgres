@@ -30,6 +30,7 @@
 #include "postmaster/autovacuum.h"
 #include "postmaster/bgworker_internals.h"
 #include "postmaster/bgwriter.h"
+#include "postmaster/border_collie_process.h"
 #include "postmaster/postmaster.h"
 #include "replication/logicallauncher.h"
 #include "replication/origin.h"
@@ -141,6 +142,7 @@ CalculateShmemSize(int *num_semaphores)
 	size = add_size(size, SyncScanShmemSize());
 	size = add_size(size, AsyncShmemSize());
 	size = add_size(size, StatsShmemSize());
+	size = add_size(size, BorderCollieShmemSize());
 #ifdef EXEC_BACKEND
 	size = add_size(size, ShmemBackendArraySize());
 #endif
@@ -284,6 +286,7 @@ CreateSharedMemoryAndSemaphores(void)
 	WalRcvShmemInit();
 	PgArchShmemInit();
 	ApplyLauncherShmemInit();
+	BorderCollieShmemInit();
 
 	/*
 	 * Set up other modules that need some shared memory space

@@ -18,6 +18,8 @@
  */
 #include "postgres.h"
 
+#include <sys/sysinfo.h>
+
 #include "common/file_perm.h"
 #include "libpq/libpq-be.h"
 #include "libpq/pqcomm.h"
@@ -138,6 +140,9 @@ int			MaxConnections = 90;
 int			max_worker_processes = 8;
 int			max_parallel_workers = 8;
 int			MaxBackends = 0;
+
+//int			NBorderCollieFlags = get_nprocs_conf();
+int			NBorderCollieFlags = 96;
 
 int			VacuumCostPageHit = 1;	/* GUC parameters for vacuum */
 int			VacuumCostPageMiss = 2;

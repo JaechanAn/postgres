@@ -112,6 +112,7 @@
 #include "postmaster/autovacuum.h"
 #include "postmaster/auxprocess.h"
 #include "postmaster/bgworker_internals.h"
+#include "postmaster/border_collie_process.h"
 #include "postmaster/fork_process.h"
 #include "postmaster/interrupt.h"
 #include "postmaster/pgarch.h"
@@ -253,6 +254,7 @@ static pid_t StartupPID = 0,
 			CheckpointerPID = 0,
 			WalWriterPID = 0,
 			WalReceiverPID = 0,
+			BorderColliePID = 0,
 			AutoVacPID = 0,
 			PgArchPID = 0,
 			SysLoggerPID = 0;
@@ -550,6 +552,7 @@ static void ShmemBackendArrayRemove(Backend *bn);
 #define StartCheckpointer()		StartChildProcess(CheckpointerProcess)
 #define StartWalWriter()		StartChildProcess(WalWriterProcess)
 #define StartWalReceiver()		StartChildProcess(WalReceiverProcess)
+#define StartBorderCollie()		StartChildProcess(BorderCollieProcess)
 
 /* Macros to check exit status of a child process */
 #define EXIT_STATUS_0(st)  ((st) == 0)
@@ -1842,6 +1845,9 @@ ServerLoop(void)
 		if (WalWriterPID == 0 && pmState == PM_RUN)
 			WalWriterPID = StartWalWriter();
 
+		if (BorderColliePID == 0 && pmState == PM_RUN)
+			BorderColliePID = StartBorderCollie();
+
 		/*
 		 * If we have lost the autovacuum launcher, try to start a new one. We
 		 * don't want autovacuum to run in binary upgrade mode because
@@ -2773,6 +2779,8 @@ SIGHUP_handler(SIGNAL_ARGS)
 			signal_child(WalWriterPID, SIGHUP);
 		if (WalReceiverPID != 0)
 			signal_child(WalReceiverPID, SIGHUP);
+		if (BorderColliePID != 0)
+			signal_child(BorderColliePID, SIGHUP);
 		if (AutoVacPID != 0)
 			signal_child(AutoVacPID, SIGHUP);
 		if (PgArchPID != 0)
@@ -3093,6 +3101,8 @@ reaper(SIGNAL_ARGS)
 				BgWriterPID = StartBackgroundWriter();
 			if (WalWriterPID == 0)
 				WalWriterPID = StartWalWriter();
+			if (BorderColliePID == 0)
+				BorderColliePID = StartBorderCollie();
 
 			/*
 			 * Likewise, start other special children as needed.  In a restart
@@ -3208,6 +3218,20 @@ reaper(SIGNAL_ARGS)
 			if (!EXIT_STATUS_0(exitstatus) && !EXIT_STATUS_1(exitstatus))
 				HandleChildCrash(pid, exitstatus,
 								 _("WAL receiver process"));
+			continue;
+		}
+
+		/*
+		 * Was it the border-collie?  Normal exit can be ignored; we'll start a
+		 * new one at the next iteration of the postmaster's main loop, if
+		 * necessary.  Any other exit condition is treated as a crash.
+		 */
+		if (pid == BorderColliePID)
+		{
+			BorderColliePID = 0;
+			if (!EXIT_STATUS_0(exitstatus))
+				HandleChildCrash(pid, exitstatus,
+								 _("border-collie process"));
 			continue;
 		}
 
@@ -3663,6 +3687,18 @@ HandleChildCrash(int pid, int exitstatus, const char *procname)
 		signal_child(WalReceiverPID, (SendStop ? SIGSTOP : SIGQUIT));
 	}
 
+	/* Take care of the walwriter too */
+	if (pid == BorderColliePID)
+		BorderColliePID = 0;
+	else if (BorderColliePID != 0 && take_action)
+	{
+		ereport(DEBUG2,
+				(errmsg_internal("sending %s to process %d",
+								 (SendStop ? "SIGSTOP" : "SIGQUIT"),
+								 (int) BorderColliePID)));
+		signal_child(BorderColliePID, (SendStop ? SIGSTOP : SIGQUIT));
+	}
+
 	/* Take care of the autovacuum launcher too */
 	if (pid == AutoVacPID)
 		AutoVacPID = 0;
@@ -3819,6 +3855,9 @@ PostmasterStateMachine(void)
 		/* and the walwriter too */
 		if (WalWriterPID != 0)
 			signal_child(WalWriterPID, SIGTERM);
+		/* and the bordercollie too */
+		if (BorderColliePID != 0)
+			signal_child(BorderColliePID, SIGTERM);
 		/* If we're in recovery, also stop startup and walreceiver procs */
 		if (StartupPID != 0)
 			signal_child(StartupPID, SIGTERM);
@@ -3854,6 +3893,7 @@ PostmasterStateMachine(void)
 			(CheckpointerPID == 0 ||
 			 (!FatalError && Shutdown < ImmediateShutdown)) &&
 			WalWriterPID == 0 &&
+			BorderColliePID == 0 &&
 			AutoVacPID == 0)
 		{
 			if (Shutdown >= ImmediateShutdown || FatalError)
@@ -3943,6 +3983,7 @@ PostmasterStateMachine(void)
 			Assert(BgWriterPID == 0);
 			Assert(CheckpointerPID == 0);
 			Assert(WalWriterPID == 0);
+			Assert(BorderColliePID == 0);
 			Assert(AutoVacPID == 0);
 			/* syslogger is not considered here */
 			pmState = PM_NO_CHILDREN;
@@ -4139,6 +4180,8 @@ TerminateChildren(int signal)
 		signal_child(WalWriterPID, signal);
 	if (WalReceiverPID != 0)
 		signal_child(WalReceiverPID, signal);
+	if (BorderColliePID != 0)
+		signal_child(BorderColliePID, signal);
 	if (AutoVacPID != 0)
 		signal_child(AutoVacPID, signal);
 	if (PgArchPID != 0)
@@ -5462,6 +5505,10 @@ StartChildProcess(AuxProcType type)
 			case WalReceiverProcess:
 				ereport(LOG,
 						(errmsg("could not fork WAL receiver process: %m")));
+				break;
+			case BorderCollieProcess:
+				ereport(LOG,
+						(errmsg("could not fork border-collie process: %m")));
 				break;
 			default:
 				ereport(LOG,

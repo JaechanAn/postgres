@@ -336,6 +336,7 @@ typedef enum BackendType
 	B_WAL_WRITER,
 	B_ARCHIVER,
 	B_LOGGER,
+	B_BORDER_COLLIE,
 } BackendType;
 
 extern PGDLLIMPORT BackendType MyBackendType;
@@ -435,6 +436,7 @@ typedef enum
 	CheckpointerProcess,
 	WalWriterProcess,
 	WalReceiverProcess,
+	BorderCollieProcess,
 
 	NUM_AUXPROCTYPES			/* Must be last! */
 } AuxProcType;
@@ -447,6 +449,7 @@ extern PGDLLIMPORT AuxProcType MyAuxProcType;
 #define AmCheckpointerProcess()		(MyAuxProcType == CheckpointerProcess)
 #define AmWalWriterProcess()		(MyAuxProcType == WalWriterProcess)
 #define AmWalReceiverProcess()		(MyAuxProcType == WalReceiverProcess)
+#define AmBorderCollieProcess()		(MyAuxProcType == BorderCollieProcess)
 
 
 /*****************************************************************************

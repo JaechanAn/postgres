@@ -19,6 +19,7 @@
 #include "miscadmin.h"
 #include "pgstat.h"
 #include "postmaster/auxprocess.h"
+#include "postmaster/border_collie_process.h"
 #include "postmaster/bgwriter.h"
 #include "postmaster/startup.h"
 #include "postmaster/walwriter.h"
@@ -79,6 +80,9 @@ AuxiliaryProcessMain(AuxProcType auxtype)
 			break;
 		case WalReceiverProcess:
 			MyBackendType = B_WAL_RECEIVER;
+			break;
+		case BorderCollieProcess:
+			MyBackendType = B_BORDER_COLLIE;
 			break;
 		default:
 			elog(ERROR, "something has gone wrong");
@@ -159,6 +163,10 @@ AuxiliaryProcessMain(AuxProcType auxtype)
 
 		case WalReceiverProcess:
 			WalReceiverMain();
+			proc_exit(1);
+
+		case BorderCollieProcess:
+			BorderCollieProcessMain();
 			proc_exit(1);
 
 		default:
